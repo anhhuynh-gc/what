@@ -221,6 +221,8 @@
     });
 
     function isPrintableKeyEvent(event) {
+      if (event.keyCode === 229)
+        return true; // temporarily fix to Android
       var codeUnit = event.key.charCodeAt(0);
       var isLeadSurrogate = (codeUnit >= 0xD800 && codeUnit <= 0xDFFF);
       return event.key.length == 1 || (event.key.length == 2 && isLeadSurrogate);
