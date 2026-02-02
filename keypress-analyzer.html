@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Keypress Duration Analyzer</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      color: #e4e4e7;
+      padding: 20px;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 {
+      text-align: center;
+      margin-bottom: 8px;
+      font-size: 1.8rem;
+      background: linear-gradient(90deg, #60a5fa, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle { text-align: center; color: #9ca3af; margin-bottom: 24px; font-size: 0.9rem; }
+    .input-area {
+      background: rgba(255,255,255,0.05);
+      border: 2px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    .input-area:focus-within { border-color: #60a5fa; }
+    #typing-input {
+      width: 100%;
+      background: rgba(0,0,0,0.3);
+      border: none;
+      border-radius: 8px;
+      padding: 16px;
+      font-size: 1.2rem;
+      color: #fff;
+      outline: none;
+    }
+    #typing-input::placeholder { color: #6b7280; }
+    .current-key {
+      margin-top: 12px;
+      font-size: 1.1rem;
+      color: #a78bfa;
+      min-height: 28px;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .stat-card {
+      background: rgba(255,255,255,0.05);
+      border-radius: 10px;
+      padding: 16px;
+      text-align: center;
+    }
+    .stat-label { font-size: 0.75rem; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; }
+    .stat-value { font-size: 1.5rem; font-weight: 700; color: #60a5fa; margin-top: 4px; }
+    .stat-unit { font-size: 0.7rem; color: #6b7280; }
+    .chart-container {
+      background: rgba(255,255,255,0.05);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .chart-title { font-size: 0.9rem; color: #9ca3af; margin-bottom: 12px; }
+    .histogram { display: flex; align-items: flex-end; height: 150px; gap: 2px; }
+    .bar-wrapper { flex: 1; display: flex; flex-direction: column; align-items: center; }
+    .bar {
+      width: 100%;
+      background: linear-gradient(180deg, #60a5fa, #3b82f6);
+      border-radius: 3px 3px 0 0;
+      min-height: 2px;
+      transition: height 0.2s;
+    }
+    .bar-label { font-size: 0.6rem; color: #6b7280; margin-top: 4px; writing-mode: vertical-rl; text-orientation: mixed; height: 40px; }
+    .recent-list {
+      background: rgba(255,255,255,0.05);
+      border-radius: 12px;
+      padding: 16px;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+    .recent-title { font-size: 0.9rem; color: #9ca3af; margin-bottom: 10px; }
+    .recent-items { display: flex; flex-wrap: wrap; gap: 6px; }
+    .recent-item {
+      background: rgba(96,165,250,0.15);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-family: monospace;
+    }
+    .recent-item span { color: #60a5fa; }
+    .controls { text-align: center; margin-top: 16px; }
+    .btn {
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      border: none;
+      color: #fff;
+      padding: 10px 24px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: transform 0.1s, opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.9; transform: scale(1.02); }
+    .empty-state { color: #6b7280; font-style: italic; text-align: center; padding: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>⌨️ Keypress Duration Analyzer</h1>
+    <p class="subtitle">Type below to measure how long you hold each key (printable keys only)</p>
+    
+    <div class="input-area">
+      <input type="text" id="typing-input" placeholder="Start typing here..." autocomplete="off">
+      <div class="current-key" id="current-key"></div>
+    </div>
+    
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Samples</div>
+        <div class="stat-value" id="stat-count">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Mean</div>
+        <div class="stat-value" id="stat-mean">--</div>
+        <div class="stat-unit">ms</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Median</div>
+        <div class="stat-value" id="stat-median">--</div>
+        <div class="stat-unit">ms</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Std Dev</div>
+        <div class="stat-value" id="stat-std">--</div>
+        <div class="stat-unit">ms</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">P95</div>
+        <div class="stat-value" id="stat-p95">--</div>
+        <div class="stat-unit">ms</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">P99</div>
+        <div class="stat-value" id="stat-p99">--</div>
+        <div class="stat-unit">ms</div>
+      </div>
+    </div>
+    
+    <div class="chart-container">
+      <div class="chart-title">Distribution (ms)</div>
+      <div class="histogram" id="histogram">
+        <div class="empty-state">Start typing to see distribution</div>
+      </div>
+    </div>
+    
+    <div class="recent-list">
+      <div class="recent-title">Recent Keypresses</div>
+      <div class="recent-items" id="recent-items">
+        <div class="empty-state">No data yet</div>
+      </div>
+    </div>
+    
+    <div class="controls">
+      <button class="btn" id="clear-btn">Clear Data</button>
+    </div>
+  </div>
+
+  <script>
+    const durations = [];
+    const recentData = [];
+    const pendingKeys = new Map();
+    const MAX_RECENT = 50;
+    const BINS = 15;
+
+    function isPrintableKeyEvent(event) {
+      var codeUnit = event.key.charCodeAt(0);
+      var isLeadSurrogate = (codeUnit >= 0xD800 && codeUnit <= 0xDFFF);
+      return event.key.length == 1 || (event.key.length == 2 && isLeadSurrogate);
+    }
+
+    function percentile(arr, p) {
+      if (arr.length === 0) return 0;
+      const sorted = [...arr].sort((a, b) => a - b);
+      const idx = (p / 100) * (sorted.length - 1);
+      const lower = Math.floor(idx);
+      const upper = Math.ceil(idx);
+      if (lower === upper) return sorted[lower];
+      return sorted[lower] + (sorted[upper] - sorted[lower]) * (idx - lower);
+    }
+
+    function mean(arr) {
+      return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+    }
+
+    function stdDev(arr) {
+      if (arr.length < 2) return 0;
+      const m = mean(arr);
+      return Math.sqrt(arr.reduce((sum, v) => sum + (v - m) ** 2, 0) / arr.length);
+    }
+
+    function updateStats() {
+      document.getElementById('stat-count').textContent = durations.length;
+      if (durations.length === 0) {
+        ['mean', 'median', 'std', 'p95', 'p99'].forEach(id => {
+          document.getElementById('stat-' + id).textContent = '--';
+        });
+        return;
+      }
+      document.getElementById('stat-mean').textContent = mean(durations).toFixed(1);
+      document.getElementById('stat-median').textContent = percentile(durations, 50).toFixed(1);
+      document.getElementById('stat-std').textContent = stdDev(durations).toFixed(1);
+      document.getElementById('stat-p95').textContent = percentile(durations, 95).toFixed(1);
+      document.getElementById('stat-p99').textContent = percentile(durations, 99).toFixed(1);
+    }
+
+    function updateHistogram() {
+      const container = document.getElementById('histogram');
+      if (durations.length === 0) {
+        container.innerHTML = '<div class="empty-state">Start typing to see distribution</div>';
+        return;
+      }
+      const min = Math.min(...durations);
+      const max = Math.max(...durations);
+      const range = max - min || 1;
+      const binSize = range / BINS;
+      const bins = Array(BINS).fill(0);
+      durations.forEach(d => {
+        let idx = Math.floor((d - min) / binSize);
+        if (idx >= BINS) idx = BINS - 1;
+        bins[idx]++;
+      });
+      const maxCount = Math.max(...bins, 1);
+      container.innerHTML = bins.map((count, i) => {
+        const height = (count / maxCount) * 100;
+        const label = Math.round(min + i * binSize);
+        return `<div class="bar-wrapper"><div class="bar" style="height:${height}%" title="${count} samples"></div><div class="bar-label">${label}</div></div>`;
+      }).join('');
+    }
+
+    function updateRecent() {
+      const container = document.getElementById('recent-items');
+      if (recentData.length === 0) {
+        container.innerHTML = '<div class="empty-state">No data yet</div>';
+        return;
+      }
+      container.innerHTML = recentData.slice(-30).reverse().map(d => 
+        `<div class="recent-item">"${d.key === ' ' ? '␣' : d.key}" <span>${d.duration}ms</span></div>`
+      ).join('');
+    }
+
+    function recordDuration(key, duration) {
+      durations.push(duration);
+      recentData.push({ key, duration });
+      if (recentData.length > MAX_RECENT) recentData.shift();
+      updateStats();
+      updateHistogram();
+      updateRecent();
+    }
+
+    const input = document.getElementById('typing-input');
+    const currentKeyEl = document.getElementById('current-key');
+
+    input.addEventListener('keydown', (e) => {
+      if (!isPrintableKeyEvent(e)) return;
+      if (e.repeat) return;
+      const keyId = e.key;
+      if (!pendingKeys.has(keyId)) {
+        pendingKeys.set(keyId, performance.now());
+        currentKeyEl.textContent = `Holding: "${keyId === ' ' ? 'Space' : keyId}"`;
+      }
+    });
+
+    input.addEventListener('keyup', (e) => {
+      if (!isPrintableKeyEvent(e)) return;
+      const keyId = e.key;
+      if (pendingKeys.has(keyId)) {
+        const start = pendingKeys.get(keyId);
+        const duration = Math.round(performance.now() - start);
+        pendingKeys.delete(keyId);
+        recordDuration(e.key, duration);
+        currentKeyEl.textContent = `Released: "${keyId === ' ' ? 'Space' : keyId}" → ${duration}ms`;
+      }
+    });
+
+    document.getElementById('clear-btn').addEventListener('click', () => {
+      durations.length = 0;
+      recentData.length = 0;
+      pendingKeys.clear();
+      input.value = '';
+      currentKeyEl.textContent = '';
+      updateStats();
+      updateHistogram();
+      updateRecent();
+    });
+
+    input.focus();
+  </script>
+</body>
+</html>
