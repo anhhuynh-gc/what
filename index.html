@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Keypress Duration Analyzer</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -71,16 +72,7 @@
       margin-bottom: 20px;
     }
     .chart-title { font-size: 0.9rem; color: #9ca3af; margin-bottom: 12px; }
-    .histogram { display: flex; align-items: flex-end; height: 150px; gap: 2px; }
-    .bar-wrapper { flex: 1; display: flex; flex-direction: column; align-items: center; }
-    .bar {
-      width: 100%;
-      background: linear-gradient(180deg, #60a5fa, #3b82f6);
-      border-radius: 3px 3px 0 0;
-      min-height: 2px;
-      transition: height 0.2s;
-    }
-    .bar-label { font-size: 0.6rem; color: #6b7280; margin-top: 4px; writing-mode: vertical-rl; text-orientation: mixed; height: 40px; }
+    .chart-wrapper { position: relative; height: 200px; }
     .recent-list {
       background: rgba(255,255,255,0.05);
       border-radius: 12px;
@@ -157,8 +149,8 @@
     
     <div class="chart-container">
       <div class="chart-title">Distribution (ms)</div>
-      <div class="histogram" id="histogram">
-        <div class="empty-state">Start typing to see distribution</div>
+      <div class="chart-wrapper">
+        <canvas id="histogram-chart"></canvas>
       </div>
     </div>
     
@@ -180,6 +172,53 @@
     const pendingKeys = new Map();
     const MAX_RECENT = 50;
     const BINS = 15;
+
+    // Initialize Chart.js histogram
+    const ctx = document.getElementById('histogram-chart').getContext('2d');
+    const histogramChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Frequency',
+          data: [],
+          backgroundColor: 'rgba(96, 165, 250, 0.7)',
+          borderColor: 'rgba(96, 165, 250, 1)',
+          borderWidth: 1,
+          borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: function(items) {
+                return items[0].label + ' ms';
+              },
+              label: function(item) {
+                return item.raw + ' samples';
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            title: { display: true, text: 'Duration (ms)', color: '#9ca3af' },
+            ticks: { color: '#9ca3af' },
+            grid: { color: 'rgba(255,255,255,0.05)' }
+          },
+          y: {
+            title: { display: true, text: 'Count', color: '#9ca3af' },
+            ticks: { color: '#9ca3af', stepSize: 1 },
+            grid: { color: 'rgba(255,255,255,0.05)' },
+            beginAtZero: true
+          }
+        }
+      }
+    });
 
     function isPrintableKeyEvent(event) {
       var codeUnit = event.key.charCodeAt(0);
@@ -210,7 +249,7 @@
     function updateStats() {
       document.getElementById('stat-count').textContent = durations.length;
       if (durations.length === 0) {
-        ['mean', 'median', 'std', 'p95', 'p99'].forEach(id => {
+        ['mean', 'median', 'std', 'p95', 'p99'].forEach(function(id) {
           document.getElementById('stat-' + id).textContent = '--';
         });
         return;
@@ -223,75 +262,93 @@
     }
 
     function updateHistogram() {
-      const container = document.getElementById('histogram');
       if (durations.length === 0) {
-        container.innerHTML = '<div class="empty-state">Start typing to see distribution</div>';
+        histogramChart.data.labels = [];
+        histogramChart.data.datasets[0].data = [];
+        histogramChart.update();
         return;
       }
-      const min = Math.min(...durations);
-      const max = Math.max(...durations);
+
+      const min = Math.min.apply(null, durations);
+      const max = Math.max.apply(null, durations);
       const range = max - min || 1;
       const binSize = range / BINS;
-      const bins = Array(BINS).fill(0);
-      durations.forEach(d => {
-        let idx = Math.floor((d - min) / binSize);
+      
+      const bins = [];
+      const labels = [];
+      
+      for (var i = 0; i < BINS; i++) {
+        bins.push(0);
+        var binStart = Math.round(min + i * binSize);
+        var binEnd = Math.round(min + (i + 1) * binSize);
+        labels.push(binStart + '-' + binEnd);
+      }
+
+      for (var j = 0; j < durations.length; j++) {
+        var d = durations[j];
+        var idx = Math.floor((d - min) / binSize);
         if (idx >= BINS) idx = BINS - 1;
         bins[idx]++;
-      });
-      const maxCount = Math.max(...bins, 1);
-      container.innerHTML = bins.map((count, i) => {
-        const height = (count / maxCount) * 100;
-        const label = Math.round(min + i * binSize);
-        return `<div class="bar-wrapper"><div class="bar" style="height:${height}%" title="${count} samples"></div><div class="bar-label">${label}</div></div>`;
-      }).join('');
+      }
+
+      histogramChart.data.labels = labels;
+      histogramChart.data.datasets[0].data = bins;
+      histogramChart.update();
     }
 
     function updateRecent() {
-      const container = document.getElementById('recent-items');
+      var container = document.getElementById('recent-items');
       if (recentData.length === 0) {
         container.innerHTML = '<div class="empty-state">No data yet</div>';
         return;
       }
-      container.innerHTML = recentData.slice(-30).reverse().map(d => 
-        `<div class="recent-item">"${d.key === ' ' ? '␣' : d.key}" <span>${d.duration}ms</span></div>`
-      ).join('');
+      var html = '';
+      var start = Math.max(0, recentData.length - 30);
+      for (var i = recentData.length - 1; i >= start; i--) {
+        var d = recentData[i];
+        var displayKey = d.key === ' ' ? '␣' : d.key;
+        html += '<div class="recent-item">"' + displayKey + '" <span>' + d.duration + 'ms</span></div>';
+      }
+      container.innerHTML = html;
     }
 
     function recordDuration(key, duration) {
       durations.push(duration);
-      recentData.push({ key, duration });
+      recentData.push({ key: key, duration: duration });
       if (recentData.length > MAX_RECENT) recentData.shift();
       updateStats();
       updateHistogram();
       updateRecent();
     }
 
-    const input = document.getElementById('typing-input');
-    const currentKeyEl = document.getElementById('current-key');
+    var input = document.getElementById('typing-input');
+    var currentKeyEl = document.getElementById('current-key');
 
-    input.addEventListener('keydown', (e) => {
+    input.addEventListener('keydown', function(e) {
       if (!isPrintableKeyEvent(e)) return;
       if (e.repeat) return;
-      const keyId = e.key;
+      var keyId = e.key;
       if (!pendingKeys.has(keyId)) {
         pendingKeys.set(keyId, performance.now());
-        currentKeyEl.textContent = `Holding: "${keyId === ' ' ? 'Space' : keyId}"`;
+        var displayKey = keyId === ' ' ? 'Space' : keyId;
+        currentKeyEl.textContent = 'Holding: "' + displayKey + '"';
       }
     });
 
-    input.addEventListener('keyup', (e) => {
+    input.addEventListener('keyup', function(e) {
       if (!isPrintableKeyEvent(e)) return;
-      const keyId = e.key;
+      var keyId = e.key;
       if (pendingKeys.has(keyId)) {
-        const start = pendingKeys.get(keyId);
-        const duration = Math.round(performance.now() - start);
+        var start = pendingKeys.get(keyId);
+        var duration = Math.round(performance.now() - start);
         pendingKeys.delete(keyId);
         recordDuration(e.key, duration);
-        currentKeyEl.textContent = `Released: "${keyId === ' ' ? 'Space' : keyId}" → ${duration}ms`;
+        var displayKey = keyId === ' ' ? 'Space' : keyId;
+        currentKeyEl.textContent = 'Released: "' + displayKey + '" → ' + duration + 'ms';
       }
     });
 
-    document.getElementById('clear-btn').addEventListener('click', () => {
+    document.getElementById('clear-btn').addEventListener('click', function() {
       durations.length = 0;
       recentData.length = 0;
       pendingKeys.clear();
