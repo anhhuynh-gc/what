@@ -331,7 +331,7 @@
     input.addEventListener('keydown', function(e) {
       if (!isPrintableKeyEvent(e)) return;
       if (e.repeat) return;
-      var keyId = e.key;
+      var keyId = e.keyCode;
       if (!pendingKeys.has(keyId)) {
         pendingKeys.set(keyId, performance.now());
         var displayKey = keyId === ' ' ? 'Space' : keyId;
@@ -341,7 +341,7 @@
 
     input.addEventListener('keyup', function(e) {
       if (!isPrintableKeyEvent(e)) return;
-      var keyId = e.key;
+      var keyId = e.keyCode;
       if (pendingKeys.has(keyId) || isUnidentifiedKeycode(e)) {
         var start = pendingKeys.get(keyId);
         var duration = Math.round(performance.now() - start);
