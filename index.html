@@ -342,7 +342,7 @@
     input.addEventListener('keyup', function(e) {
       if (!isPrintableKeyEvent(e)) return;
       var keyId = e.key;
-      if (pendingKeys.has(keyId)) {
+      if (pendingKeys.has(keyId) || isUnidentifiedKeycode(e)) {
         var start = pendingKeys.get(keyId);
         var duration = Math.round(performance.now() - start);
         pendingKeys.delete(keyId);
@@ -351,6 +351,10 @@
         currentKeyEl.textContent = 'Released: "' + displayKey + '" → ' + duration + 'ms';
       }
     });
+
+    function isUnidentifiedKeycode(e) {
+      return e.keyCode === 229 || e.keyCode === 231;
+    }
 
     document.getElementById('clear-btn').addEventListener('click', function() {
       durations.length = 0;
